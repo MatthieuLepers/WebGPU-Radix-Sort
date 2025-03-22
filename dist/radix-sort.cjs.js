@@ -1,4 +1,6 @@
-"use strict";Object.defineProperty(exports,Symbol.toStringTag,{value:"Module"});function p(l,e){const i={x:e,y:1};if(e>l.limits.maxComputeWorkgroupsPerDimension){const r=Math.floor(Math.sqrt(e)),t=Math.ceil(e/r);i.x=r,i.y=t}return i}function c({device:l,label:e,data:i,usage:r=0}){const t=l.createBuffer({label:e,usage:r,size:i.length*4,mappedAtCreation:!0});return new Uint32Array(t.getMappedRange()).set(i),t.unmap(),t}const E=`
+"use strict";Object.defineProperty(exports,Symbol.toStringTag,{value:"Module"});class P{options;workgroupSize={x:16,y:16};pipelines=[];shaderModules={};constructor(e){this.options=e,Object.keys(e).forEach(t=>{Object.defineProperty(this,t,{get:()=>this.options[t],set:i=>{this.options[t]=i}})})}get workgroupCount(){return Math.ceil(this.count/this.threadsPerWorkgroup)}get threadsPerWorkgroup(){return this.workgroupSize.x*this.workgroupSize.y}get itemsPerWorkgroup(){return 2*this.threadsPerWorkgroup}}function f(o,e){const t={x:e,y:1};if(e>o.limits.maxComputeWorkgroupsPerDimension){const i=Math.floor(Math.sqrt(e)),r=Math.ceil(e/i);t.x=i,t.y=r}return t}function c({device:o,label:e,data:t,usage:i=0}){const r=o.createBuffer({label:e,usage:i,size:t.length*4,mappedAtCreation:!0});return new Uint32Array(r.getMappedRange()).set(t),r.unmap(),r}function D(o,e){const t=Math.min(8192,e.size),i=Math.ceil(e.size/t),r=o.createTexture({size:{width:t,height:i},format:"r32uint",usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.COPY_SRC}),s=o.createCommandEncoder();return s.copyBufferToTexture({buffer:e},{texture:r},[r.width,r.height,r.depthOrArrayLayers]),o.queue.submit([s.finish()]),r}const m=o=>o.split(`
+`).filter(e=>!e.toLowerCase().includes("values")).join(`
+`),k=`
 @group(0) @binding(0) var<storage, read_write> items: array<u32>;
 @group(0) @binding(1) var<storage, read_write> blockSums: array<u32>;
 
@@ -104,7 +106,7 @@ fn add_block_sums(
 
   items[ELM_ID + 1u] += blockSum;
 }
-`,m=`
+`,v=`
 @group(0) @binding(0) var<storage, read_write> items: array<u32>;
 @group(0) @binding(1) var<storage, read_write> blockSums: array<u32>;
 
@@ -226,99 +228,14 @@ fn add_block_sums(
 
   items[ELM_ID + 1u] += blockSum;
 }
-`;class d{device;count;workgroupSize;pipelines=[];shaderModules={};constructor({device:e,count:i,workgroupSize:r={x:16,y:16}}){this.device=e,this.count=i,this.workgroupSize=r}get workgroupCount(){return Math.ceil(this.count/this.threadsPerWorkgroup)}get threadsPerWorkgroup(){return this.workgroupSize.x*this.workgroupSize.y}get itemsPerWorkgroup(){return 2*this.threadsPerWorkgroup}}class O extends d{constructor({device:e,count:i,workgroupSize:r={x:16,y:16},data:t,avoidBankConflicts:s=!1}){if(super({device:e,count:i,workgroupSize:r}),Math.log2(this.threadsPerWorkgroup)%1!==0)throw new Error(`workgroupSize.x * workgroupSize.y must be a power of two. (current: ${this.threadsPerWorkgroup})`);this.shaderModules.prefixSum=this.device.createShaderModule({label:"prefix-sum",code:s?m:E}),this.createPassRecursive(t,i)}createPassRecursive(e,i){const r=Math.ceil(i/this.itemsPerWorkgroup),t=p(this.device,r),s=this.device.createBuffer({label:"prefix-sum-block-sum",size:r*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),u=this.device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}}]}),o=this.device.createBindGroup({label:"prefix-sum-bind-group",layout:u,entries:[{binding:0,resource:{buffer:e}},{binding:1,resource:{buffer:s}}]}),a=this.device.createPipelineLayout({bindGroupLayouts:[u]}),f=this.device.createComputePipeline({label:"prefix-sum-scan-pipeline",layout:a,compute:{module:this.shaderModules.prefixSum,entryPoint:"reduce_downsweep",constants:{WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,ITEMS_PER_WORKGROUP:this.itemsPerWorkgroup,ELEMENT_COUNT:i}}});if(this.pipelines.push({pipeline:f,bindGroup:o,dispatchSize:t}),r>1){this.createPassRecursive(s,r);const n=this.device.createComputePipeline({label:"prefix-sum-add-block-pipeline",layout:a,compute:{module:this.shaderModules.prefixSum,entryPoint:"add_block_sums",constants:{WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,ELEMENT_COUNT:i}}});this.pipelines.push({pipeline:n,bindGroup:o,dispatchSize:t})}}getDispatchChain(){return this.pipelines.flatMap(e=>[e.dispatchSize.x,e.dispatchSize.y,1])}dispatch(e,i,r=0){this.pipelines.forEach(({pipeline:t,bindGroup:s,dispatchSize:u},o)=>{e.setPipeline(t),e.setBindGroup(0,s),i?e.dispatchWorkgroupsIndirect(i,r+o*3*4):e.dispatchWorkgroups(u.x,u.y,1)})}}const P=(l=!1,e=!1,i="full")=>`
-@group(0) @binding(0) var<storage, read> input: array<u32>;
-@group(0) @binding(1) var<storage, read_write> output: array<u32>;
-@group(0) @binding(2) var<storage, read> original: array<u32>;
-@group(0) @binding(3) var<storage, read_write> is_sorted: u32;
-
-override WORKGROUP_SIZE_X: u32;
-override WORKGROUP_SIZE_Y: u32;
-override THREADS_PER_WORKGROUP: u32;
-override ELEMENT_COUNT: u32;
-override START_ELEMENT: u32;
-
-var<workgroup> s_data: array<u32, THREADS_PER_WORKGROUP>;
-
-// Reset dispatch buffer and is_sorted flag
-@compute @workgroup_size(WORKGROUP_SIZE_X, WORKGROUP_SIZE_Y, 1)
-fn reset(
-  @builtin(workgroup_id) w_id: vec3<u32>,
-  @builtin(num_workgroups) w_dim: vec3<u32>,
-  @builtin(local_invocation_index) TID: u32, // Local thread ID
-) {
-  if (TID >= ELEMENT_COUNT) {
-    return;
-  }
-
-  if (TID == 0) {
-    is_sorted = 0u;
-  }
-
-  let ELM_ID = TID * 3;
-
-  output[ELM_ID] = original[ELM_ID];
-}
-
-@compute @workgroup_size(WORKGROUP_SIZE_X, WORKGROUP_SIZE_Y, 1)
-fn check_sort(
-  @builtin(workgroup_id) w_id: vec3<u32>,
-  @builtin(num_workgroups) w_dim: vec3<u32>,
-  @builtin(local_invocation_index) TID: u32, // Local thread ID
-) {
-  let WORKGROUP_ID = w_id.x + w_id.y * w_dim.x;
-  let WID = WORKGROUP_ID * THREADS_PER_WORKGROUP + START_ELEMENT;
-  let GID = TID + WID; // Global thread ID
-
-  // Load data into shared memory
-  ${l?T:"s_data[TID] = select(0u, input[GID], GID < ELEMENT_COUNT);"}
-
-  // Perform parallel reduction
-  for (var d = 1u; d < THREADS_PER_WORKGROUP; d *= 2u) {
-    workgroupBarrier();  
-    if (TID % (2u * d) == 0u) {
-      s_data[TID] += s_data[TID + d];
-    }
-  }
-  workgroupBarrier();
-
-  // Write reduction result
-  ${e?U(i):I}
-}`,I=`
-  if (TID == 0) {
-    output[WORKGROUP_ID] = s_data[0];
-  }
-`,T=`
-  let LAST_THREAD = min(THREADS_PER_WORKGROUP, ELEMENT_COUNT - WID) - 1;
-
-  // Load current element into shared memory
-  // Also load next element for comparison
-  let elm = select(0u, input[GID], GID < ELEMENT_COUNT);
-  let next = select(0u, input[GID + 1], GID < ELEMENT_COUNT-1);
-  s_data[TID] = elm;
-  workgroupBarrier();
-
-  s_data[TID] = select(0u, 1u, GID < ELEMENT_COUNT-1 && elm > next);
-`,U=l=>`
-  let fullDispatchLength = arrayLength(&output);
-  let dispatchIndex = TID * 3;
-
-  if (dispatchIndex >= fullDispatchLength) {
-    return;
-  }
-
-  ${l=="full"?G:D}
-`,D=`
-  output[dispatchIndex] = select(0, original[dispatchIndex], s_data[0] == 0 && is_sorted == 0u);
-`,G=`
-  if (TID == 0 && s_data[0] == 0) {
-    is_sorted = 1u;
-  }
-
-  output[dispatchIndex] = select(0, original[dispatchIndex], s_data[0] != 0);
-`;class _ extends d{start;mode;buffers={};outputs=[];constructor({device:e,count:i,workgroupSize:r={x:16,y:16},data:t,result:s,original:u,isSorted:o,start:a=0,mode:f="full"}){super({device:e,count:i,workgroupSize:r}),this.start=a,this.mode=f,this.buffers={data:t,result:s,original:u,isSorted:o},this.createPassesRecursive(t,i)}static findOptimalDispatchChain(e,i,r){const t=r.x*r.y,s=[];do{const u=Math.ceil(i/t),o=p(e,u);s.push(o.x,o.y,1),i=u}while(i>1);return s}createPassesRecursive(e,i,r=0){const t=Math.ceil(i/this.threadsPerWorkgroup),s=r===0,u=t<=1,o=`check-sort-${this.mode}-${r}`,a=u?this.buffers.result:this.device.createBuffer({label:o,size:t*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),f=this.device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},...u?[{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}}]:[]]}),n=this.device.createBindGroup({layout:f,entries:[{binding:0,resource:{buffer:e}},{binding:1,resource:{buffer:a}},...u?[{binding:2,resource:{buffer:this.buffers.original}},{binding:3,resource:{buffer:this.buffers.isSorted}}]:[]]}),R=this.device.createPipelineLayout({bindGroupLayouts:[f]}),b=s?this.start+i:i,g=s?this.start:0,S=this.device.createComputePipeline({layout:R,compute:{module:this.device.createShaderModule({label:o,code:P(s,u,this.mode)}),entryPoint:this.mode=="reset"?"reset":"check_sort",constants:{ELEMENT_COUNT:b,WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,...this.mode!=="reset"&&{THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,START_ELEMENT:g}}}});this.outputs.push(a),this.pipelines.push({pipeline:S,bindGroup:n}),u||this.createPassesRecursive(a,t,r+1)}dispatch(e,i,r=0){this.pipelines.forEach(({pipeline:t,bindGroup:s},u)=>{const o=this.mode!=="reset"&&(this.mode==="full"||u<this.pipelines.length-1);e.setPipeline(t),e.setBindGroup(0,s),o&&i?e.dispatchWorkgroupsIndirect(i,r+u*3*4):e.dispatchWorkgroups(1,1,1)})}}const k=`
-@group(0) @binding(0) var<storage, read> input: array<u32>;
-@group(0) @binding(1) var<storage, read_write> local_prefix_sums: array<u32>;
+`;class E extends P{constructor({device:e,count:t,workgroupSize:i={x:16,y:16},data:r,avoidBankConflicts:s=!1}){if(super({device:e,count:t,workgroupSize:i}),Math.log2(this.threadsPerWorkgroup)%1!==0)throw new Error(`workgroupSize.x * workgroupSize.y must be a power of two. (current: ${this.threadsPerWorkgroup})`);this.shaderModules.prefixSum=this.device.createShaderModule({label:"prefix-sum",code:s?v:k}),this.createPassRecursive(r,t)}createPassRecursive(e,t){const i=Math.ceil(t/this.itemsPerWorkgroup),r=f(this.device,i),s=this.device.createBuffer({label:"prefix-sum-block-sum",size:i*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),u=this.device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}}]}),a=this.device.createBindGroup({label:"prefix-sum-bind-group",layout:u,entries:[{binding:0,resource:{buffer:e}},{binding:1,resource:{buffer:s}}]}),n=this.device.createPipelineLayout({bindGroupLayouts:[u]}),l=this.device.createComputePipeline({label:"prefix-sum-scan-pipeline",layout:n,compute:{module:this.shaderModules.prefixSum,entryPoint:"reduce_downsweep",constants:{WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,ITEMS_PER_WORKGROUP:this.itemsPerWorkgroup,ELEMENT_COUNT:t}}});if(this.pipelines.push({pipeline:l,bindGroup:a,dispatchSize:r}),i>1){this.createPassRecursive(s,i);const d=this.device.createComputePipeline({label:"prefix-sum-add-block-pipeline",layout:n,compute:{module:this.shaderModules.prefixSum,entryPoint:"add_block_sums",constants:{WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,ELEMENT_COUNT:t}}});this.pipelines.push({pipeline:d,bindGroup:a,dispatchSize:r})}}getDispatchChain(){return this.pipelines.flatMap(e=>[e.dispatchSize.x,e.dispatchSize.y,1])}dispatch(e,t,i=0){this.pipelines.forEach(({pipeline:r,bindGroup:s,dispatchSize:u},a)=>{e.setPipeline(r),e.setBindGroup(0,s),t?e.dispatchWorkgroupsIndirect(t,i+a*3*4):e.dispatchWorkgroups(u.x,u.y,1)})}}class p extends P{buffers={};constructor(e){super(e),this.start=e.start??0,this.mode=e.mode??"full",this.buffers.result=e.result,this.buffers.original=e.original,this.buffers.isSorted=e.isSorted}static findOptimalDispatchChain(e,t,i){const r=i.x*i.y,s=[];do{const u=Math.ceil(t/r),a=f(e,u);s.push(a.x,a.y,1),t=u}while(t>1);return s}dispatch(e,t,i=0){this.pipelines.forEach(({pipeline:r,bindGroup:s},u)=>{const a=this.mode!=="reset"&&(this.mode==="full"||u<this.pipelines.length-1);e.setPipeline(r),e.setBindGroup(0,s),a&&t?e.dispatchWorkgroupsIndirect(t,i+u*3*4):e.dispatchWorkgroups(1,1,1)})}}class x extends P{buffers={};kernels={};dispatchSize={x:1,y:1};dispatchOffsets={radixSort:0,checkSortFast:3*4,prefixSum:6*4};initialDispatch=[];constructor(e){super(e),this.bitCount=e.bitCount??32,this.checkOrder=e.checkOrder??!1,this.avoidBankConflicts=e.avoidBankConflicts??!1}get prefixBlockWorkgroupCount(){return 4*this.workgroupCount}createShaderModules(){this.shaderModules.blockSum=this.device.createShaderModule({label:"radix-sort-block-sum",code:this.blockSumSource}),this.shaderModules.reorder=this.device.createShaderModule({label:"radix-sort-reorder",code:this.reorderSource})}createPipelines(){this.#e();const e=this.#t();this.createResources(),this.#i(e),this.createCheckSortKernels(e);for(let t=0;t<this.bitCount;t+=2){const i=t%4===0,r=this.getPassInData(i),s=this.getPassOutData(i),u=this.createBlockSumPipeline(r,t),a=this.createReorderPipeline(r,s,t);this.pipelines.push(u,a)}}#e(){const e=this.device.createBuffer({label:"radix-sort-prefix-block-sum",size:this.prefixBlockWorkgroupCount*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),t=new E({device:this.device,data:e,count:this.prefixBlockWorkgroupCount,workgroupSize:this.workgroupSize,avoidBankConflicts:this.avoidBankConflicts});this.kernels.prefixSum=t,this.buffers.prefixBlockSum=e}#t(){const e=f(this.device,this.workgroupCount),t=this.kernels.prefixSum.getDispatchChain(),i=Math.min(this.count,this.threadsPerWorkgroup*4),r=this.count-i,s=i-1,u=p.findOptimalDispatchChain(this.device,i,this.workgroupSize),a=p.findOptimalDispatchChain(this.device,r,this.workgroupSize),n=[e.x,e.y,1,...u.slice(0,3),...t];return this.dispatchSize=e,this.initialDispatch=n,{initialDispatch:n,dispatchSizesFull:a,checkSortFastCount:i,checkSortFullCount:r,startFull:s}}#i(e){this.checkOrder&&(this.buffers.dispatchSize=c({device:this.device,label:"radix-sort-dispatch-size",data:e.initialDispatch,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.INDIRECT}),this.buffers.originalDispatchSize=c({device:this.device,label:"radix-sort-dispatch-size-original",data:e.initialDispatch,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC}),this.buffers.checkSortFullDispatchSize=c({label:"check-sort-full-dispatch-size",device:this.device,data:e.dispatchSizesFull,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.INDIRECT}),this.buffers.originalCheckSortFullDispatchSize=c({label:"check-sort-full-dispatch-size-original",device:this.device,data:e.dispatchSizesFull,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC}),this.buffers.isSorted=c({label:"is-sorted",device:this.device,data:[0],usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}))}dispatch(e){this.checkOrder?this.#s(e):this.#r(e)}#r(e){for(let t=0;t<this.bitCount/2;t+=1){const i=this.pipelines[t*2],r=this.pipelines[t*2+1];e.setPipeline(i.pipeline),e.setBindGroup(0,i.bindGroup),e.dispatchWorkgroups(this.dispatchSize.x,this.dispatchSize.y,1),this.kernels.prefixSum.dispatch(e),e.setPipeline(r.pipeline),e.setBindGroup(0,r.bindGroup),e.dispatchWorkgroups(this.dispatchSize.x,this.dispatchSize.y,1)}}#s(e){this.kernels.checkSortReset.dispatch(e);for(let t=0;t<this.bitCount/2;t++){const i=this.pipelines[t*2],r=this.pipelines[t*2+1];t%2==0&&(this.kernels.checkSortFast.dispatch(e,this.buffers.dispatchSize,this.dispatchOffsets.checkSortFast),this.kernels.checkSortFull.dispatch(e,this.buffers.checkSortFullDispatchSize)),e.setPipeline(i.pipeline),e.setBindGroup(0,i.bindGroup),e.dispatchWorkgroupsIndirect(this.buffers.dispatchSize,this.dispatchOffsets.radixSort),this.kernels.prefixSum.dispatch(e,this.buffers.dispatchSize,this.dispatchOffsets.prefixSum),e.setPipeline(r.pipeline),e.setBindGroup(0,r.bindGroup),e.dispatchWorkgroupsIndirect(this.buffers.dispatchSize,this.dispatchOffsets.radixSort)}}}const U=o=>`
+${o==="buffer"?`
+      @group(0) @binding(0) var<storage, read> input: array<u32>;
+      @group(0) @binding(1) var<storage, read_write> local_prefix_sums: array<u32>;
+    `:`
+      @group(0) @binding(0) var input: texture_storage_2d<rg32uint, read>;
+      @group(0) @binding(1) var local_prefix_sums: texture_storage_2d<r32uint, write>;
+    `}
 @group(0) @binding(2) var<storage, read_write> block_sums: array<u32>;
 
 override WORKGROUP_COUNT: u32;
@@ -329,6 +246,24 @@ override CURRENT_BIT: u32;
 override ELEMENT_COUNT: u32;
 
 var<workgroup> s_prefix_sum: array<u32, 2u * (THREADS_PER_WORKGROUP + 1u)>;
+
+fn getInput(index: u32) -> u32 {
+  ${o==="buffer"?"return input[index];":`
+        let dimX = textureDimensions(input).r;
+        let x = i32(index % dimX);
+        let y = i32(index / dimX);
+        return textureLoad(input, vec2<i32>(x, y)).x;
+      `}
+}
+
+fn setLocalPrefixSum(index: u32, val: u32) {
+  ${o==="buffer"?"local_prefix_sums[index] = val;":`
+        let dimX = textureDimensions(local_prefix_sums).x;
+        let x = i32(index % dimX);
+        let y = i32(index / dimX);
+        textureStore(local_prefix_sums, vec2<i32>(x, y), vec4<u32>(val, 0u, 0u, 0u));
+      `}
+}
 
 @compute @workgroup_size(WORKGROUP_SIZE_X, WORKGROUP_SIZE_Y, 1)
 fn radix_sort(
@@ -341,13 +276,13 @@ fn radix_sort(
   let GID = WID + TID; // Global thread ID
 
   // Extract 2 bits from the input
-  let elm = select(input[GID], 0u, GID >= ELEMENT_COUNT);
+  let elm = select(getInput(GID), 0u, GID >= ELEMENT_COUNT);
   let extract_bits: u32 = (elm >> CURRENT_BIT) & 0x3u;
 
   var bit_prefix_sums = array<u32, 4>(0, 0, 0, 0);
 
   // If the workgroup is inactive, prevent block_sums buffer update
-  var LAST_THREAD: u32 = 0xffffffffu; 
+  var LAST_THREAD: u32 = 0xffffffffu;
 
   if (WORKGROUP_ID < WORKGROUP_COUNT) {
     // Otherwise store the index of the last active thread in the workgroup
@@ -404,10 +339,10 @@ fn radix_sort(
 
   if (GID < ELEMENT_COUNT) {
     // Store local prefix sum to global memory
-    local_prefix_sums[GID] = bit_prefix_sums[extract_bits];
+    setLocalPrefixSum(GID, bit_prefix_sums[extract_bits]);
   }
 }
-`,v=`
+`,I=`
 @group(0) @binding(0) var<storage, read_write> input: array<u32>;
 @group(0) @binding(1) var<storage, read_write> local_prefix_sums: array<u32>;
 @group(0) @binding(2) var<storage, read_write> block_sums: array<u32>;
@@ -524,13 +459,21 @@ fn radix_sort(
     local_prefix_sums[WID + new_pos] = prefix_sum;
   }
 }
-`,h=`
-@group(0) @binding(0) var<storage, read> inputKeys: array<u32>;
-@group(0) @binding(1) var<storage, read_write> outputKeys: array<u32>;
-@group(0) @binding(2) var<storage, read> local_prefix_sum: array<u32>;
+`,R=o=>`
+${o==="buffer"?`
+      @group(0) @binding(0) var<storage, read> inputKeys: array<u32>;
+      @group(0) @binding(1) var<storage, read_write> outputKeys: array<u32>;
+      @group(0) @binding(2) var<storage, read> local_prefix_sum: array<u32>;
+    `:`
+      @group(0) @binding(0) var input: texture_storage_2d<rg32uint, read>;
+      @group(0) @binding(1) var output: texture_storage_2d<rg32uint, write>;
+      @group(0) @binding(2) var local_prefix_sum: texture_storage_2d<r32uint, read_write>;
+    `}
 @group(0) @binding(3) var<storage, read> prefix_block_sum: array<u32>;
-@group(0) @binding(4) var<storage, read> inputValues: array<u32>;
-@group(0) @binding(5) var<storage, read_write> outputValues: array<u32>;
+${o==="buffer"?`
+      @group(0) @binding(4) var<storage, read> inputValues: array<u32>;
+      @group(0) @binding(5) var<storage, read_write> outputValues: array<u32>;
+    `:""}
 
 override WORKGROUP_COUNT: u32;
 override THREADS_PER_WORKGROUP: u32;
@@ -539,32 +482,180 @@ override WORKGROUP_SIZE_Y: u32;
 override CURRENT_BIT: u32;
 override ELEMENT_COUNT: u32;
 
+fn getInput(index: u32) -> vec2<u32> {
+  ${o==="buffer"?`
+        let result: vec2<u32> = vec2<u32>(
+          inputKeys[index],
+          inputValues[index]
+        );
+        return result;
+      `:`
+        let dimX = textureDimensions(input).x;
+        let x = i32(index % dimX);
+        let y = i32(index / dimY);
+        return textureLoad(input, vec2<i32>(x, y)).xy;
+      `}
+}
+
+fn setOutput(index: u32, key: u32, val: u32) {
+  ${o==="buffer"?`
+        outputKeys[index] = key;
+        outputValues[index] = val;
+      `:`
+        let dimX = textureDimensions(output).x;
+        let x = i32(index % dimX);
+        let y = i32(index / dimX);
+        textureStore(output, vec2<i32>(x, y), vec4<u32>(key, val, 0u, 0u));
+      `}
+}
+
+fn getLocalPrefixSum(index: u32) -> u32 {
+  ${o==="buffer"?"return local_prefix_sum[index];":`
+        let dimX = textureDimensions(local_prefix_sum).x;
+        let x = i32(index % dimX);
+        let y = i32(index / dimX);
+        return textureLoad(local_prefix_sum, vec2<i32>(x, y)).x;
+      `}
+}
+
 @compute @workgroup_size(WORKGROUP_SIZE_X, WORKGROUP_SIZE_Y, 1)
 fn radix_sort_reorder(
   @builtin(workgroup_id) w_id: vec3<u32>,
   @builtin(num_workgroups) w_dim: vec3<u32>,
   @builtin(local_invocation_index) TID: u32, // Local thread ID
-) { 
+) {
   let WORKGROUP_ID = w_id.x + w_id.y * w_dim.x;
   let WID = WORKGROUP_ID * THREADS_PER_WORKGROUP;
   let GID = WID + TID; // Global thread ID
 
   if (GID >= ELEMENT_COUNT) { return; }
 
-  let k = inputKeys[GID];
-  let v = inputValues[GID];
+  let input = getInput(GID);
 
-  let local_prefix = local_prefix_sum[GID];
+  let local_prefix = getLocalPrefixSum(GID);
 
   // Calculate new position
-  let extract_bits = (k >> CURRENT_BIT) & 0x3u;
+  let extract_bits = (input.x >> CURRENT_BIT) & 0x3u;
   let pid = extract_bits * WORKGROUP_COUNT + WORKGROUP_ID;
   let sorted_position = prefix_block_sum[pid] + local_prefix;
 
-  outputKeys[sorted_position] = k;
-  outputValues[sorted_position] = v;
+  setOutput(sorted_position, input.x, input.y);
 }
-`;class w extends d{bitCount;checkOrder=!1;localShuffle=!1;avoidBankConflicts=!1;prefixBlockWorkgroupCount;hasValues;dispatchSize={x:1,y:1};dispatchOffsets={radixSort:0,checkSortFast:3*4,prefixSum:6*4};initialDispatch=[];kernels={};buffers={};texture;constructor({device:e,count:i,workgroupSize:r={x:16,y:16},texture:t,keys:s,values:u,bitCount:o=32,checkOrder:a=!1,localShuffle:f=!1,avoidBankConflicts:n=!1}){if(super({device:e,count:i,workgroupSize:r}),!e)throw new Error("No device provided");if(!s&&!t)throw new Error("No keys buffer or texture provided");if(!Number.isInteger(i)||i<=0)throw new Error("Invalid count parameter");if(!Number.isInteger(o)||o<=0||o>32)throw new Error(`Invalid bitCount parameter: ${o}`);if(!Number.isInteger(r.x)||!Number.isInteger(r.y))throw new Error("Invalid workgroupSize parameter");if(o%4!=0)throw new Error("bitCount must be a multiple of 4");this.bitCount=o,this.checkOrder=a,this.localShuffle=f,this.avoidBankConflicts=n,this.prefixBlockWorkgroupCount=4*this.workgroupCount,this.hasValues=!!u||!!t,this.texture=t,this.buffers={keys:s,values:u},this.createShaderModules(),this.createPipelines()}createShaderModules(){const e=r=>r.split(`
-`).filter(t=>!t.toLowerCase().includes("values")).join(`
-`),i=this.localShuffle?v:k;this.shaderModules={blockSum:this.device.createShaderModule({label:"radix-sort-block-sum",code:this.hasValues?i:e(i)}),reorder:this.device.createShaderModule({label:"radix-sort-reorder",code:this.hasValues?h:e(h)})}}createPipelines(){this.createPrefixSumKernel();const e=this.calculateDispatchSizes();this.createBuffers(e),this.createCheckSortKernels(e);for(let i=0;i<this.bitCount;i+=2){const r=i%4==0,t=r?this.buffers.keys:this.buffers.tmpKeys,s=r?this.buffers.values:this.buffers.tmpValues,u=r?this.buffers.tmpKeys:this.buffers.keys,o=r?this.buffers.tmpValues:this.buffers.values,a=this.createBlockSumPipeline(t,s,i),f=this.createReorderPipeline(t,s,u,o,i);this.pipelines.push(a,f)}}createPrefixSumKernel(){const e=this.device.createBuffer({label:"radix-sort-prefix-block-sum",size:this.prefixBlockWorkgroupCount*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),i=new O({device:this.device,data:e,count:this.prefixBlockWorkgroupCount,workgroupSize:this.workgroupSize,avoidBankConflicts:this.avoidBankConflicts});this.kernels.prefixSum=i,this.buffers.prefixBlockSum=e}calculateDispatchSizes(){const e=p(this.device,this.workgroupCount),i=this.kernels.prefixSum.getDispatchChain(),r=Math.min(this.count,this.threadsPerWorkgroup*4),t=this.count-r,s=r-1,u=_.findOptimalDispatchChain(this.device,r,this.workgroupSize),o=_.findOptimalDispatchChain(this.device,t,this.workgroupSize),a=[e.x,e.y,1,...u.slice(0,3),...i];return this.dispatchOffsets={radixSort:0,checkSortFast:3*4,prefixSum:6*4},this.dispatchSize=e,this.initialDispatch=a,{initialDispatch:a,dispatchSizesFull:o,checkSortFastCount:r,checkSortFullCount:t,startFull:s}}createBuffers(e){const i=this.device.createBuffer({label:"radix-sort-tmp-keys",size:this.count*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),r=this.hasValues?this.device.createBuffer({label:"radix-sort-tmp-values",size:this.count*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}):void 0,t=this.device.createBuffer({label:"radix-sort-local-prefix-sum",size:this.count*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});if(this.buffers.tmpKeys=i,this.buffers.tmpValues=r,this.buffers.localPrefixSum=t,!this.checkOrder)return;const s=c({device:this.device,label:"radix-sort-dispatch-size",data:e.initialDispatch,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.INDIRECT}),u=c({device:this.device,label:"radix-sort-dispatch-size-original",data:e.initialDispatch,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC}),o=c({label:"check-sort-full-dispatch-size",device:this.device,data:e.dispatchSizesFull,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.INDIRECT}),a=c({label:"check-sort-full-dispatch-size-original",device:this.device,data:e.dispatchSizesFull,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC}),f=c({label:"is-sorted",device:this.device,data:[0],usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});this.buffers.dispatchSize=s,this.buffers.originalDispatchSize=u,this.buffers.checkSortFullDispatchSize=o,this.buffers.originalCheckSortFullDispatchSize=a,this.buffers.isSorted=f}createCheckSortKernels(e){if(!this.checkOrder)return;const{checkSortFastCount:i,checkSortFullCount:r,startFull:t}=e,s=new _({mode:"full",device:this.device,data:this.buffers.keys,result:this.buffers.dispatchSize,original:this.buffers.originalDispatchSize,isSorted:this.buffers.isSorted,count:r,start:t,workgroupSize:this.workgroupSize}),u=new _({mode:"fast",device:this.device,data:this.buffers.keys,result:this.buffers.checkSortFullDispatchSize,original:this.buffers.originalCheckSortFullDispatchSize,isSorted:this.buffers.isSorted,count:i,workgroupSize:this.workgroupSize}),o=this.initialDispatch.length/3;if(u.threadsPerWorkgroup<s.pipelines.length||s.threadsPerWorkgroup<o){console.warn("Warning: workgroup size is too small to enable check sort optimization, disabling..."),this.checkOrder=!1;return}const a=new _({mode:"reset",device:this.device,data:this.buffers.keys,original:this.buffers.originalDispatchSize,result:this.buffers.dispatchSize,isSorted:this.buffers.isSorted,count:o,workgroupSize:p(this.device,o)});this.kernels.checkSort={reset:a,fast:u,full:s}}createBlockSumPipeline(e,i,r){const t=this.device.createBindGroupLayout({label:"radix-sort-block-sum",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:this.localShuffle?"storage":"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},...this.localShuffle&&this.hasValues?[{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}}]:[]]}),s=this.device.createBindGroup({layout:t,entries:[{binding:0,resource:{buffer:e}},{binding:1,resource:{buffer:this.buffers.localPrefixSum}},{binding:2,resource:{buffer:this.buffers.prefixBlockSum}},...this.localShuffle&&this.hasValues?[{binding:3,resource:{buffer:i}}]:[]]}),u=this.device.createPipelineLayout({bindGroupLayouts:[t]});return{pipeline:this.device.createComputePipeline({label:"radix-sort-block-sum",layout:u,compute:{module:this.shaderModules.blockSum,entryPoint:"radix_sort",constants:{WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,WORKGROUP_COUNT:this.workgroupCount,THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,ELEMENT_COUNT:this.count,CURRENT_BIT:r}}}),bindGroup:s}}createReorderPipeline(e,i,r,t,s){const u=this.device.createBindGroupLayout({label:"radix-sort-reorder",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},...this.hasValues?[{binding:4,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:5,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}}]:[]]}),o=this.device.createBindGroup({layout:u,entries:[{binding:0,resource:{buffer:e}},{binding:1,resource:{buffer:r}},{binding:2,resource:{buffer:this.buffers.localPrefixSum}},{binding:3,resource:{buffer:this.buffers.prefixBlockSum}},...this.hasValues?[{binding:4,resource:{buffer:i}},{binding:5,resource:{buffer:t}}]:[]]}),a=this.device.createPipelineLayout({bindGroupLayouts:[u]});return{pipeline:this.device.createComputePipeline({label:"radix-sort-reorder",layout:a,compute:{module:this.shaderModules.reorder,entryPoint:"radix_sort_reorder",constants:{WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,WORKGROUP_COUNT:this.workgroupCount,THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,ELEMENT_COUNT:this.count,CURRENT_BIT:s}}}),bindGroup:o}}dispatch(e){this.checkOrder?this.#i(e):this.#e(e)}#e(e){for(let i=0;i<this.bitCount/2;i+=1){const r=this.pipelines[i*2],t=this.pipelines[i*2+1];e.setPipeline(r.pipeline),e.setBindGroup(0,r.bindGroup),e.dispatchWorkgroups(this.dispatchSize.x,this.dispatchSize.y,1),this.kernels.prefixSum.dispatch(e),e.setPipeline(t.pipeline),e.setBindGroup(0,t.bindGroup),e.dispatchWorkgroups(this.dispatchSize.x,this.dispatchSize.y,1)}}#i(e){this.kernels.checkSort.reset.dispatch(e);for(let i=0;i<this.bitCount/2;i++){const r=this.pipelines[i*2],t=this.pipelines[i*2+1];i%2==0&&(this.kernels.checkSort.fast.dispatch(e,this.buffers.dispatchSize,this.dispatchOffsets.checkSortFast),this.kernels.checkSort.full.dispatch(e,this.buffers.checkSortFullDispatchSize)),e.setPipeline(r.pipeline),e.setBindGroup(0,r.bindGroup),e.dispatchWorkgroupsIndirect(this.buffers.dispatchSize,this.dispatchOffsets.radixSort),this.kernels.prefixSum.dispatch(e,this.buffers.dispatchSize,this.dispatchOffsets.prefixSum),e.setPipeline(t.pipeline),e.setBindGroup(0,t.bindGroup),e.dispatchWorkgroupsIndirect(this.buffers.dispatchSize,this.dispatchOffsets.radixSort)}}}exports.PrefixSumKernel=O;exports.RadixSortKernel=w;
+`,T=(o=!1,e=!1,t="full",i)=>`
+${i==="buffer"?`
+      @group(0) @binding(0) var<storage, read> input: array<u32>;
+      @group(0) @binding(1) var<storage, read_write> output: array<u32>;
+    `:`
+      @group(0) @binding(0) var input: texture_storage_2d<rg32uint, read>;
+      @group(0) @binding(1) var output: texture_storage_2d<r32uint, write>;
+    `}
+@group(0) @binding(2) var<storage, read> original: array<u32>;
+@group(0) @binding(3) var<storage, read_write> is_sorted: u32;
+
+override WORKGROUP_SIZE_X: u32;
+override WORKGROUP_SIZE_Y: u32;
+override THREADS_PER_WORKGROUP: u32;
+override ELEMENT_COUNT: u32;
+override START_ELEMENT: u32;
+
+var<workgroup> s_data: array<u32, THREADS_PER_WORKGROUP>;
+
+fn getInput(index: u32) -> u32 {
+  ${i==="buffer"?"return input[index];":`
+        let dimX = textureDimensions(input).r;
+        let x = i32(index % dimX);
+        let y = i32(index / dimX);
+        return textureLoad(input, vec2<i32>(x, y)).x;
+      `}
+}
+
+fn setOutput(index: u32, data: u32) {
+  ${i==="buffer"?"output[index] = data;":`
+        let dimX = textureDimensions(output).x;
+        let x = i32(index % dimX);
+        let y = i32(index / dimX);
+        textureStore(output, vec2<i32>(x, y), vec4<u32>(data, 0u, 0u, 0u));
+      `}
+}
+
+// Reset dispatch buffer and is_sorted flag
+@compute @workgroup_size(WORKGROUP_SIZE_X, WORKGROUP_SIZE_Y, 1)
+fn reset(
+  @builtin(workgroup_id) w_id: vec3<u32>,
+  @builtin(num_workgroups) w_dim: vec3<u32>,
+  @builtin(local_invocation_index) TID: u32, // Local thread ID
+) {
+  if (TID >= ELEMENT_COUNT) {
+    return;
+  }
+
+  if (TID == 0) {
+    is_sorted = 0u;
+  }
+
+  let ELM_ID = TID * 3;
+
+  setOutput(ELM_ID, original[ELM_ID]);
+}
+
+@compute @workgroup_size(WORKGROUP_SIZE_X, WORKGROUP_SIZE_Y, 1)
+fn check_sort(
+  @builtin(workgroup_id) w_id: vec3<u32>,
+  @builtin(num_workgroups) w_dim: vec3<u32>,
+  @builtin(local_invocation_index) TID: u32, // Local thread ID
+) {
+  let WORKGROUP_ID = w_id.x + w_id.y * w_dim.x;
+  let WID = WORKGROUP_ID * THREADS_PER_WORKGROUP + START_ELEMENT;
+  let GID = TID + WID; // Global thread ID
+
+  // Load data into shared memory
+  ${o?y:"s_data[TID] = select(0u, getInput(GID), GID < ELEMENT_COUNT);"}
+
+  // Perform parallel reduction
+  for (var d = 1u; d < THREADS_PER_WORKGROUP; d *= 2u) {
+    workgroupBarrier();
+    if (TID % (2u * d) == 0u) {
+      s_data[TID] += s_data[TID + d];
+    }
+  }
+  workgroupBarrier();
+
+  // Write reduction result
+  ${e?W(t,i):w}
+}`,w=`
+  if (TID == 0) {
+    setOutput(WORKGROUP_ID, s_data[0]);
+  }
+`,y=`
+  let LAST_THREAD = min(THREADS_PER_WORKGROUP, ELEMENT_COUNT - WID) - 1;
+
+  // Load current element into shared memory
+  // Also load next element for comparison
+  let elm = select(0u, getInput(GID), GID < ELEMENT_COUNT);
+  let next = select(0u, getInput(GID + 1), GID < ELEMENT_COUNT-1);
+  s_data[TID] = elm;
+  workgroupBarrier();
+
+  s_data[TID] = select(0u, 1u, GID < ELEMENT_COUNT-1 && elm > next);
+`,W=(o,e="buffer")=>`
+  ${e==="buffer"?"let fullDispatchLength = arrayLength(&output);":`
+        let dim = textureDimensions(output);
+        let fullDispatchLength = dim.x * dim.y;
+      `}
+  let dispatchIndex = TID * 3;
+
+  if (dispatchIndex >= fullDispatchLength) {
+    return;
+  }
+
+  ${o=="full"?K:C}
+`,C=`
+  setOutput(dispatchIndex, select(0, original[dispatchIndex], s_data[0] == 0 && is_sorted == 0u));
+`,K=`
+  if (TID == 0 && s_data[0] == 0) {
+    is_sorted = 1u;
+  }
+
+  setOutput(dispatchIndex, select(0, original[dispatchIndex], s_data[0] != 0));
+`;class O extends p{outputs=[];constructor(e){super(e),this.buffers.data=e.data.keys,this.createPassesRecursive(e.data,this.count)}createPassesRecursive(e,t,i=0){const r=Math.ceil(t/this.threadsPerWorkgroup),s=!i,u=r<=1,a=`check-sort-${this.mode}-${i}`,n=u?this.buffers.result:this.device.createBuffer({label:a,size:r*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),l=this.device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},...u?[{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}}]:[]]}),d=this.device.createBindGroup({layout:l,entries:[{binding:0,resource:{buffer:e.keys}},{binding:1,resource:{buffer:n}},...u?[{binding:2,resource:{buffer:this.buffers.original}},{binding:3,resource:{buffer:this.buffers.isSorted}}]:[]]}),_=this.device.createPipelineLayout({bindGroupLayouts:[l]}),h=s?this.start+t:t,g=s?this.start:0,b=this.device.createComputePipeline({layout:_,compute:{module:this.device.createShaderModule({label:a,code:T(s,u,this.mode,"buffer")}),entryPoint:this.mode=="reset"?"reset":"check_sort",constants:{ELEMENT_COUNT:h,WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,...this.mode!=="reset"&&{THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,START_ELEMENT:g}}}});this.outputs.push(n),this.pipelines.push({pipeline:b,bindGroup:d}),u||this.createPassesRecursive({keys:n},r,i+1)}}class M extends x{constructor(e){super(e),this.localShuffle=e.localShuffle??!1,this.buffers.keys=e.data.keys,e.data.values&&(this.buffers.values=e.data.values),this.createShaderModules(),this.createPipelines()}get hasValues(){return!!this.data.values}get blockSumSource(){const e=this.localShuffle?I:U("buffer");return this.hasValues?e:m(e)}get reorderSource(){return this.hasValues?R("buffer"):m(R("buffer"))}createResources(){this.buffers.tmpKeys=this.device.createBuffer({label:"radix-sort-tmp-keys",size:this.count*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),this.hasValues&&(this.buffers.tmpValues=this.device.createBuffer({label:"radix-sort-tmp-values",size:this.count*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST})),this.buffers.localPrefixSum=this.device.createBuffer({label:"radix-sort-local-prefix-sum",size:this.count*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST})}getPassInData(e){return{keys:e?this.buffers.keys:this.buffers.tmpKeys,values:e?this.buffers.values:this.buffers.tmpValues}}getPassOutData(e){return{keys:e?this.buffers.tmpKeys:this.buffers.keys,values:e?this.buffers.tmpValues:this.buffers.values}}createBlockSumPipeline(e,t){const i=this.device.createBindGroupLayout({label:"radix-sort-block-sum",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:this.localShuffle?"storage":"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},...this.localShuffle&&this.hasValues?[{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}}]:[]]}),r=this.device.createBindGroup({layout:i,entries:[{binding:0,resource:{buffer:e.keys}},{binding:1,resource:{buffer:this.buffers.localPrefixSum}},{binding:2,resource:{buffer:this.buffers.prefixBlockSum}},...this.localShuffle&&this.hasValues?[{binding:3,resource:{buffer:e.values}}]:[]]}),s=this.device.createPipelineLayout({bindGroupLayouts:[i]});return{pipeline:this.device.createComputePipeline({label:"radix-sort-block-sum",layout:s,compute:{module:this.shaderModules.blockSum,entryPoint:"radix_sort",constants:{WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,WORKGROUP_COUNT:this.workgroupCount,THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,ELEMENT_COUNT:this.count,CURRENT_BIT:t}}}),bindGroup:r}}createCheckSortKernels(e){if(!this.checkOrder)return;const{checkSortFastCount:t,checkSortFullCount:i,startFull:r}=e;this.kernels.checkSortFull=new O({mode:"full",device:this.device,data:this.data,result:this.buffers.dispatchSize,original:this.buffers.originalDispatchSize,isSorted:this.buffers.isSorted,count:i,start:r,workgroupSize:this.workgroupSize}),this.kernels.checkSortFast=new O({mode:"fast",device:this.device,data:this.data,result:this.buffers.checkSortFullDispatchSize,original:this.buffers.originalCheckSortFullDispatchSize,isSorted:this.buffers.isSorted,count:t,workgroupSize:this.workgroupSize});const s=this.initialDispatch.length/3;if(this.kernels.checkSortFast.threadsPerWorkgroup<this.kernels.checkSortFull.pipelines.length||this.kernels.checkSortFull.threadsPerWorkgroup<s){console.warn("Warning: workgroup size is too small to enable check sort optimization, disabling..."),this.checkOrder=!1;return}this.kernels.checkSortReset=new O({mode:"reset",device:this.device,data:this.data,original:this.buffers.originalDispatchSize,result:this.buffers.dispatchSize,isSorted:this.buffers.isSorted,count:s,workgroupSize:f(this.device,s)})}createReorderPipeline(e,t,i){const r=this.device.createBindGroupLayout({label:"radix-sort-reorder",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},...this.hasValues?[{binding:4,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:5,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}}]:[]]}),s=this.device.createBindGroup({layout:r,entries:[{binding:0,resource:{buffer:e.keys}},{binding:1,resource:{buffer:t.keys}},{binding:2,resource:{buffer:this.buffers.localPrefixSum}},{binding:3,resource:{buffer:this.buffers.prefixBlockSum}},...this.hasValues?[{binding:4,resource:{buffer:e.values}},{binding:5,resource:{buffer:t.values}}]:[]]}),u=this.device.createPipelineLayout({bindGroupLayouts:[r]});return{pipeline:this.device.createComputePipeline({label:"radix-sort-reorder",layout:u,compute:{module:this.shaderModules.reorder,entryPoint:"radix_sort_reorder",constants:{WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,WORKGROUP_COUNT:this.workgroupCount,THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,ELEMENT_COUNT:this.count,CURRENT_BIT:i}}}),bindGroup:s}}}class S extends p{textures={};outputs=[];constructor(e){super(e),this.textures.read=e.data.texture,this.createPassesRecursive(e.data,this.count)}createPassesRecursive(e,t,i=0){const r=Math.ceil(t/this.threadsPerWorkgroup),s=!i,u=r<=1,a=`check-sort-${this.mode}-${i}`,n=u?this.buffers.result:this.device.createBuffer({label:a,size:r*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),l=D(this.device,n),d=this.device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:"read-only",format:"rg32uint",viewDimension:"2d"}},{binding:1,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:"read-write",format:"r32uint",viewDimension:"2d"}},...u?[{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}}]:[]]}),_=this.device.createBindGroup({layout:d,entries:[{binding:0,resource:e.texture.createView()},{binding:1,resource:l.createView()},...u?[{binding:2,resource:{buffer:this.buffers.original}},{binding:3,resource:{buffer:this.buffers.isSorted}}]:[]]}),h=this.device.createPipelineLayout({bindGroupLayouts:[d]}),g=s?this.start+t:t,b=s?this.start:0,G=this.device.createComputePipeline({layout:h,compute:{module:this.device.createShaderModule({label:a,code:T(s,u,this.mode,"texture")}),entryPoint:this.mode=="reset"?"reset":"check_sort",constants:{ELEMENT_COUNT:g,WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,...this.mode!=="reset"&&{THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,START_ELEMENT:b}}}});this.outputs.push(l),this.pipelines.push({pipeline:G,bindGroup:_}),u||this.createPassesRecursive({texture:l},r,i+1)}}class L extends x{textures={};constructor(e){super(e),this.textures.read=e.data.texture,this.createShaderModules(),this.createPipelines()}get hasValues(){return!0}get blockSumSource(){return U("texture")}get reorderSource(){return R("texture")}createResources(){this.textures.write=this.device.createTexture({size:{width:this.textures.read.width,height:this.textures.read.height},format:this.textures.read.format,usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.COPY_SRC}),this.textures.localPrefixSum=this.device.createTexture({size:{width:this.textures.read.width,height:this.textures.read.height},format:"r32uint",usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.COPY_SRC})}getPassInData(e){return{texture:e?this.textures.read:this.textures.write}}getPassOutData(e){return{texture:e?this.textures.write:this.textures.read}}createBlockSumPipeline(e,t){const i=this.device.createBindGroupLayout({label:"radix-sort-block-sum",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:"read-only",format:"rg32uint",viewDimension:"2d"}},{binding:1,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:"write-only",format:"r32uint",viewDimension:"2d"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}}]}),r=this.device.createBindGroup({layout:i,entries:[{binding:0,resource:e.texture.createView()},{binding:1,resource:this.textures.localPrefixSum.createView()},{binding:2,resource:{buffer:this.buffers.prefixBlockSum}}]}),s=this.device.createPipelineLayout({bindGroupLayouts:[i]});return{pipeline:this.device.createComputePipeline({label:"radix-sort-block-sum",layout:s,compute:{module:this.shaderModules.blockSum,entryPoint:"radix_sort",constants:{WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,WORKGROUP_COUNT:this.workgroupCount,THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,ELEMENT_COUNT:this.count,CURRENT_BIT:t}}}),bindGroup:r}}createCheckSortKernels(e){if(!this.checkOrder)return;const{checkSortFastCount:t,checkSortFullCount:i,startFull:r}=e;this.kernels.checkSortFull=new S({mode:"full",device:this.device,data:this.data,result:this.buffers.dispatchSize,original:this.buffers.originalDispatchSize,isSorted:this.buffers.isSorted,count:i,start:r,workgroupSize:this.workgroupSize}),this.kernels.checkSortFast=new S({mode:"fast",device:this.device,data:this.data,result:this.buffers.checkSortFullDispatchSize,original:this.buffers.originalCheckSortFullDispatchSize,isSorted:this.buffers.isSorted,count:t,workgroupSize:this.workgroupSize});const s=this.initialDispatch.length/3;if(this.kernels.checkSortFast.threadsPerWorkgroup<this.kernels.checkSortFull.pipelines.length||this.kernels.checkSortFull.threadsPerWorkgroup<s){console.warn("Warning: workgroup size is too small to enable check sort optimization, disabling..."),this.checkOrder=!1;return}this.kernels.checkSortReset=new S({mode:"reset",device:this.device,data:this.data,original:this.buffers.originalDispatchSize,result:this.buffers.dispatchSize,isSorted:this.buffers.isSorted,count:s,workgroupSize:f(this.device,s)})}createReorderPipeline(e,t,i){const r=this.device.createBindGroupLayout({label:"radix-sort-reorder",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:"read-only",format:"rg32uint",viewDimension:"2d"}},{binding:1,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:"write-only",format:"rg32uint",viewDimension:"2d"}},{binding:2,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:"read-write",format:"r32uint",viewDimension:"2d"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}}]}),s=this.device.createBindGroup({layout:r,entries:[{binding:0,resource:e.texture.createView()},{binding:1,resource:t.texture.createView()},{binding:2,resource:this.textures.localPrefixSum.createView()},{binding:3,resource:{buffer:this.buffers.prefixBlockSum}}]}),u=this.device.createPipelineLayout({bindGroupLayouts:[r]});return{pipeline:this.device.createComputePipeline({label:"radix-sort-reorder",layout:u,compute:{module:this.shaderModules.reorder,entryPoint:"radix_sort_reorder",constants:{WORKGROUP_SIZE_X:this.workgroupSize.x,WORKGROUP_SIZE_Y:this.workgroupSize.y,WORKGROUP_COUNT:this.workgroupCount,THREADS_PER_WORKGROUP:this.threadsPerWorkgroup,ELEMENT_COUNT:this.count,CURRENT_BIT:i}}}),bindGroup:s}}}exports.PrefixSumKernel=E;exports.RadixSortBufferKernel=M;exports.RadixSortTextureKernel=L;
 //# sourceMappingURL=radix-sort.cjs.js.map

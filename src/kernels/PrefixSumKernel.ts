@@ -1,6 +1,6 @@
-import { findOptimalDispatchSize } from './utils';
-import prefixSumSource from './shaders/PrefixSum';
-import prefixSumSourceNoBankConflict from './shaders/optimizations/PrefixSumNoBankConflict';
+import { findOptimalDispatchSize } from '../utils';
+import prefixSumSource from '../shaders/PrefixSum';
+import prefixSumSourceNoBankConflict from '../shaders/optimizations/PrefixSumNoBankConflict';
 import { AbstractKernel, type AbstractKernelOptions } from './AbstractKernel';
 
 interface IPrefixSumKernelOptions extends AbstractKernelOptions {

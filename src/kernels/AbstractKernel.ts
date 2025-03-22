@@ -1,4 +1,4 @@
-import type { DispatchSize, WorkgroupSize } from './utils';
+import type { DispatchSize, WorkgroupSize } from '../utils';
 
 export interface AbstractKernelOptions {
   device: GPUDevice;

@@ -1,4 +1,4 @@
-const checkSortSource = (isFirstPass = false, isLastPass = false, kernelMode = 'full', dataType = 'buffer') => /* wgsl */ `
+const checkSortSource = (isFirstPass = false, isLastPass = false, kernelMode = 'full', dataType: 'buffer' | 'texture') => /* wgsl */ `
 ${
   dataType === 'buffer'
     ? `
@@ -7,7 +7,7 @@ ${
     `
     : `
       @group(0) @binding(0) var input: texture_storage_2d<rg32uint, read>;
-      @group(0) @binding(1) var output: texture_storage_2d<r32uint, read_write>;
+      @group(0) @binding(1) var output: texture_storage_2d<r32uint, write>;
     `
 }
 @group(0) @binding(2) var<storage, read> original: array<u32>;
@@ -39,10 +39,10 @@ fn setOutput(index: u32, data: u32) {
     dataType === 'buffer'
       ? 'output[index] = data;'
       : `
-        let dimX = textureDimensions(output).r;
+        let dimX = textureDimensions(output).x;
         let x = i32(index % dimX);
         let y = i32(index / dimX);
-        textureStore(output, vec2<u32>(x, y), vec4<u32>(data, 0u, 0u, 0u));
+        textureStore(output, vec2<i32>(x, y), vec4<u32>(data, 0u, 0u, 0u));
       `
   }
 }

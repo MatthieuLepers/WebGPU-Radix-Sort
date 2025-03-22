@@ -1,4 +1,4 @@
-import { RadixSortKernel, PrefixSumKernel } from '../src';
+import { RadixSortBufferKernel, PrefixSumKernel } from '../src';
 import type { WorkgroupSize } from '../src/utils';
 
 /** Test the radix sort kernel on GPU for integrity
@@ -47,10 +47,12 @@ export async function testRadixSort(device: GPUDevice, keysAndValues: boolean = 
       const [valuesBuffer, valuesBufferMapped] = createBuffers(device, values);
 
       // Create kernel
-      const kernel = new RadixSortKernel({
+      const kernel = new RadixSortBufferKernel({
         device,
-        keys: keysBuffer,
-        values: keysAndValues ? valuesBuffer : undefined,
+        data: {
+          keys: keysBuffer,
+          values: keysAndValues ? valuesBuffer : undefined,
+        },
         count: subElementCount,
         bitCount,
         workgroupSize,

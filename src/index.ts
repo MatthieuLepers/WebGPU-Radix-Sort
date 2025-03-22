@@ -1,2 +1,3 @@
-export { RadixSortKernel } from './RadixSortKernel';
-export { PrefixSumKernel } from './PrefixSumKernel';
+export { RadixSortBufferKernel } from './kernels/radix-sort/RadixSortBufferKernel';
+export { RadixSortTextureKernel } from './kernels/radix-sort/RadixSortTextureKernel';
+export { PrefixSumKernel } from './kernels/PrefixSumKernel';

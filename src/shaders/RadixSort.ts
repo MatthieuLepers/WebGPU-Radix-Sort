@@ -1,10 +1,15 @@
-const radixSortSource = (input: GPUBuffer | GPUTexture) => /* wgsl */ `
+const radixSortSource = (dataType: 'buffer' | 'texture') => /* wgsl */ `
 ${
-  input instanceof GPUBuffer
-    ? `@group(0) @binding(0) var<storage, read> input: array<u32>;`
-    : `@group(0) @binding(0) var input: texture_storage_2d<rg32uint, read>;`
+  dataType === 'buffer'
+    ? `
+      @group(0) @binding(0) var<storage, read> input: array<u32>;
+      @group(0) @binding(1) var<storage, read_write> local_prefix_sums: array<u32>;
+    `
+    : `
+      @group(0) @binding(0) var input: texture_storage_2d<rg32uint, read>;
+      @group(0) @binding(1) var local_prefix_sums: texture_storage_2d<r32uint, write>;
+    `
 }
-@group(0) @binding(1) var<storage, read_write> local_prefix_sums: array<u32>;
 @group(0) @binding(2) var<storage, read_write> block_sums: array<u32>;
 
 override WORKGROUP_COUNT: u32;
@@ -18,13 +23,26 @@ var<workgroup> s_prefix_sum: array<u32, 2u * (THREADS_PER_WORKGROUP + 1u)>;
 
 fn getInput(index: u32) -> u32 {
   ${
-    input instanceof GPUBuffer
+    dataType === 'buffer'
       ? `return input[index];`
       : `
         let dimX = textureDimensions(input).r;
         let x = i32(index % dimX);
         let y = i32(index / dimX);
         return textureLoad(input, vec2<i32>(x, y)).x;
+      `
+  }
+}
+
+fn setLocalPrefixSum(index: u32, val: u32) {
+  ${
+    dataType === 'buffer'
+      ? 'local_prefix_sums[index] = val;'
+      : `
+        let dimX = textureDimensions(local_prefix_sums).x;
+        let x = i32(index % dimX);
+        let y = i32(index / dimX);
+        textureStore(local_prefix_sums, vec2<i32>(x, y), vec4<u32>(val, 0u, 0u, 0u));
       `
   }
 }
@@ -103,7 +121,7 @@ fn radix_sort(
 
   if (GID < ELEMENT_COUNT) {
     // Store local prefix sum to global memory
-    local_prefix_sums[GID] = bit_prefix_sums[extract_bits];
+    setLocalPrefixSum(GID, bit_prefix_sums[extract_bits]);
   }
 }
 `;

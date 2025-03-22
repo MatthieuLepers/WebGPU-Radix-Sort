@@ -5,6 +5,7 @@
   "scripts": {
     "lint": "eslint ./src --fix",
     "type-check": "tsc --noEmit",
+    "dev": "vite -c vite.example.config.ts",
     "build": "npm run type-check & vite build",
     "build:example": "npm run type-check & vite -c vite.example.config.ts build",
     "build:all": "npm run build & npm run build:example"

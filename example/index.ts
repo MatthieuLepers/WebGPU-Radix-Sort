@@ -1,4 +1,4 @@
-import { RadixSortKernel } from '../src';
+import { RadixSortBufferKernel } from '../src';
 import { createBuffers, createTimestampQuery, testRadixSort } from './tests';
 
 const settings = {
@@ -60,7 +60,7 @@ async function runSort(device: GPUDevice, compareAgainstCpu: boolean = true) {
 
   const [keysBuffer] = createBuffers(device, keys);
 
-  let valuesBuffer: GPUBuffer | null = null;
+  let valuesBuffer: GPUBuffer | undefined;
 
   if (settings.sortMode === 'Keys & Values') {
     const values = new Uint32Array(settings.elementCount).map(() => Math.floor(Math.random() * 1_000_000));
@@ -68,10 +68,12 @@ async function runSort(device: GPUDevice, compareAgainstCpu: boolean = true) {
     valuesBuffer = buffers[0];
   }
 
-  const kernel = new RadixSortKernel({
+  const kernel = new RadixSortBufferKernel({
     device,
-    keys: keysBuffer,
-    values: valuesBuffer!,
+    data: {
+      keys: keysBuffer,
+      values: valuesBuffer,
+    },
     count: settings.elementCount,
     bitCount: settings.bitCount,
     workgroupSize: { x: settings.workgroupSize, y: settings.workgroupSize },
