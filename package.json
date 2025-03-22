@@ -1,0 +1,47 @@
+{
+  "name": "webgpu-radix-sort",
+  "version": "1.0.7",
+  "description": "Fast 4-way parallel radix sort for WebGPU",
+  "scripts": {
+    "lint": "eslint ./src --fix",
+    "type-check": "tsc --noEmit",
+    "build": "npm run type-check & vite build",
+    "build:example": "npm run type-check & vite -c vite.example.config.ts build",
+    "build:all": "npm run build & npm run build:example"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kishimisu/WebGPU-Radix-Sort.git"
+  },
+  "keywords": [
+    "sorting",
+    "sort",
+    "radix",
+    "webgpu",
+    "wgsl",
+    "compute",
+    "shader"
+  ],
+  "author": "kishimisu",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/kishimisu/WebGPU-Radix-Sort/issues"
+  },
+  "homepage": "https://github.com/kishimisu/WebGPU-Radix-Sort#readme",
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@tsconfig/node22": "^22.0.0",
+    "@types/node": "^22.13.10",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@webgpu/types": "^0.1.57",
+    "eslint": "^8.57.1",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-config-airbnb-typescript": "^17.1.0",
+    "eslint-plugin-import": "^2.31.0",
+    "tslib": "^2.8.1",
+    "typescript": "^5.8.2",
+    "vite": "^4.5.9"
+  }
+}
