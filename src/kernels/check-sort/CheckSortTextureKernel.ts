@@ -32,7 +32,7 @@ export class CheckSortTextureKernel extends AbstractCheckSortKernel<TextureKerne
       size: workgroupCount * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
-    const outputTexture = bufferToTexture(this.device, outputBuffer);
+    const outputTexture = bufferToTexture(this.device, outputBuffer, 'rg32uint');
 
     const bindGroupLayout = this.device.createBindGroupLayout({
       entries: [
@@ -50,7 +50,7 @@ export class CheckSortTextureKernel extends AbstractCheckSortKernel<TextureKerne
           visibility: GPUShaderStage.COMPUTE,
           storageTexture: {
             access: 'read-write',
-            format: 'r32uint',
+            format: 'rg32uint',
             viewDimension: '2d',
           },
         },

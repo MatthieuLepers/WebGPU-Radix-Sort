@@ -42,20 +42,26 @@ export function createBufferFromData({ device, label, data, usage = 0 }: {
   return dispatchSizes;
 }
 
-export function bufferToTexture(device: GPUDevice, buffer: GPUBuffer): GPUTexture {
-  const TEXTURE_WIDTH = Math.min(8192, buffer.size);
-  const TEXTURE_HEIGHT = Math.ceil((buffer.size) / TEXTURE_WIDTH);
+export function bufferToTexture(device: GPUDevice, buffer: GPUBuffer, format: GPUTextureFormat): GPUTexture {
+  const TEXTURE_WIDTH = Math.min(8192, buffer.size / 4);
+  const TEXTURE_HEIGHT = Math.ceil((buffer.size / 4) / TEXTURE_WIDTH);
 
   const texture = device.createTexture({
     size: {
       width: TEXTURE_WIDTH,
       height: TEXTURE_HEIGHT,
     },
-    format: 'r32uint',
+    format,
     usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC,
   });
+  const regex = /^([rgbaRGBA]{1,4})(\d+)(\w+)?$/;
+  const matches = format.match(regex)!;
+  const components = matches[1].length;
   const command = device.createCommandEncoder();
-  command.copyBufferToTexture({ buffer }, { texture }, [texture.width, texture.height, texture.depthOrArrayLayers]);
+  command.copyBufferToTexture({
+    buffer,
+    bytesPerRow: Math.ceil((texture.width * components * 4) / 256) * 256,
+  }, { texture }, [texture.width, texture.height, texture.depthOrArrayLayers]);
   device.queue.submit([command.finish()]);
 
   return texture;

@@ -7,7 +7,7 @@ ${
     `
     : `
       @group(0) @binding(0) var input: texture_storage_2d<rg32uint, read>;
-      @group(0) @binding(1) var output: texture_storage_2d<r32uint, write>;
+      @group(0) @binding(1) var output: texture_storage_2d<rg32uint, write>;
     `
 }
 @group(0) @binding(2) var<storage, read> original: array<u32>;

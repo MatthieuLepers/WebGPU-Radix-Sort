@@ -1,7 +1,8 @@
-import { RadixSortBufferKernel } from '../src';
-import { createBuffers, createTimestampQuery, testRadixSort } from './tests';
+import { RadixSortBufferKernel, RadixSortTextureKernel } from '../src';
+import { createBuffers, createTexture, createTimestampQuery, testRadixSort } from './tests';
 
 const settings = {
+  dataType: 'buffer',
   elementCount: 2 ** 20,
   bitCount: 32,
   workgroupSize: 16,
@@ -42,10 +43,7 @@ window.onload = async function main() {
   gui.onClickSort = () => onClickSort(device);
 }
 
-/**
- * Run the prefix sum kernel and profile the performance
- */
-async function runSort(device: GPUDevice, compareAgainstCpu: boolean = true) {
+function runSortWithBuffers(device: GPUDevice) {
   const keys = new Uint32Array(settings.elementCount);
   const keysRange = 2 ** settings.bitCount;
 
@@ -82,6 +80,53 @@ async function runSort(device: GPUDevice, compareAgainstCpu: boolean = true) {
     avoidBankConflicts: settings.avoidBankConflicts,
   });
 
+  return {
+    kernel,
+    sort: () => keys.sort((a, b) => a - b),
+  };
+}
+
+function runSortWithTextures(device: GPUDevice) {
+  const data = new Uint32Array(2 * settings.elementCount);
+  const keysRange = 2 ** settings.bitCount;
+
+  for (let i = 0; i < data.length / 2; i += 1) {
+    data[i * 2] = settings.initialSort === 'Random'
+      ? Math.floor(Math.random() * keysRange)
+      : i
+    ;
+    data[i * 2 + 1] = Math.floor(Math.random() * 1_000_000);
+  }
+
+  const [texture] = createTexture(device, data);
+
+  const kernel = new RadixSortTextureKernel({
+    device,
+    data: { texture },
+    count: settings.elementCount,
+    bitCount: settings.bitCount,
+    workgroupSize: { x: settings.workgroupSize, y: settings.workgroupSize },
+    checkOrder: settings.checkOrder,
+    avoidBankConflicts: settings.avoidBankConflicts,
+  });
+
+  return {
+    kernel,
+    sort: () => [...Array(data.length / 2).keys()]
+      .map((i) => data[i * 2])
+      .sort((a, b) => a - b),
+  };
+}
+
+/**
+ * Run the prefix sum kernel and profile the performance
+ */
+async function runSort(device: GPUDevice, compareAgainstCpu: boolean = true) {
+  const { kernel, sort } = settings.dataType === 'buffer'
+    ? runSortWithBuffers(device)
+    : runSortWithTextures(device)
+  ;
+
   const query = createTimestampQuery(device);
 
   const encoder = device.createCommandEncoder();
@@ -94,17 +139,14 @@ async function runSort(device: GPUDevice, compareAgainstCpu: boolean = true) {
 
   const timestamps = await query.getTimestamps();
 
-  const times: {
-    cpu: number;
-    gpu: number;
-  } = {
+  const times = {
     cpu: 0,
     gpu: Number(timestamps[1] - timestamps[0]) / 1e6,
   };
 
   if (compareAgainstCpu) {
     const start = performance.now();
-    keys.sort((a, b) => a - b);
+    sort();
     times.cpu = performance.now() - start;
   }
 
@@ -148,13 +190,14 @@ class GUI {
 
     this.createHeader();
     this.createTitle('Radix Sort Kernel');
+    const dataTypeSelect = this.createDropdown(settings, 'dataType', 'Data Type', ['buffer', 'texture']);
     this.createSlider(settings, 'elementCount', 'Element Count', settings.elementCount, 1e4, 2 ** 24, 1, { logarithmic: true });
     this.createSlider(settings, 'bitCount', 'Bit Count', settings.bitCount, 4, 32, 4);
     this.createSlider(settings, 'workgroupSize', 'Workgroup Size', settings.workgroupSize, 2, 5, 1, { power_of_two: true });
 
     this.createTitle('Optimizations');
     this.createCheckbox(settings, 'checkOrder', 'Check If Sorted', settings.checkOrder);
-    this.createCheckbox(settings, 'localShuffle', 'Local Shuffle', settings.localShuffle);
+    const localShuffleCheck = this.createCheckbox(settings, 'localShuffle', 'Local Shuffle', settings.localShuffle);
     this.createCheckbox(settings, 'avoidBankConflicts', 'Avoid Bank Conflicts', settings.avoidBankConflicts);
 
     this.createTitle('Testing');
@@ -164,6 +207,15 @@ class GUI {
 
     this.createButton('Run Radix Sort', () => this.onClickSort(device));
 
+    dataTypeSelect.addEventListener('change', () => {
+      const ctn = localShuffleCheck.closest('.gui-ctn') as HTMLElement;
+      if (dataTypeSelect.value === '0') {
+        ctn.removeAttribute('style');
+      } else {
+        ctn.style.display = 'none';
+      }
+    });
+
     this.addHints();
   }
 
@@ -171,6 +223,7 @@ class GUI {
     const elements = this.dom.querySelectorAll<HTMLElement>('.gui-ctn');
     const hints = [
       '',
+      'Type of data passed to the GPU (buffer or texture_storage_2d)',
       'Number of elements to sort',
       'Number of bits to sort',
       'Workgroup size in x and y dimensions',
@@ -223,7 +276,8 @@ class GUI {
       }
       object[prop] = newValue;
       val.innerText = prettifyNumber(newValue);
-    })
+    });
+    return input;
   }
 
   createCheckbox(object: Record<string, any>, prop: string, name: string, value: boolean = false) {
@@ -235,7 +289,8 @@ class GUI {
     check.addEventListener('change', () => {
       object[prop] = check.checked;
       val.innerText = check.checked ? 'true' : 'false';
-    })
+    });
+    return check;
   }
 
   createDropdown(object: Record<string, any>, prop: string, name: string, options: Array<string>) {
@@ -247,17 +302,19 @@ class GUI {
     options.forEach((option, index) => {
       const opt = createElm(select, 'option', '', { innerText: option, value: index }) as HTMLOptionElement;
       if (option === object[prop]) opt.selected = true;
-    })
+    });
     select.addEventListener('change', () => {
       object[prop] = options[parseInt(select.value)];
       val.innerText = options[parseInt(select.value)];
-    })
+    });
+    return select;
   }
 
   createButton(name: string, callback: () => void) {
     const ctn = createElm(this.dom, 'div', 'gui-ctn');
     const button = createElm(ctn, 'button', 'gui-button', { innerText: name });
     button.addEventListener('click', callback);
+    return button;
   }
 }
 

@@ -42,7 +42,7 @@ fn getInput(index: u32) -> vec2<u32> {
       : `
         let dimX = textureDimensions(input).x;
         let x = i32(index % dimX);
-        let y = i32(index / dimY);
+        let y = i32(index / dimX);
         return textureLoad(input, vec2<i32>(x, y)).xy;
       `
   }

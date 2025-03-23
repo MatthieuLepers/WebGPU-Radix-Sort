@@ -3,7 +3,8 @@ import type { WorkgroupSize } from '../src/utils';
 
 /** Test the radix sort kernel on GPU for integrity
  * 
- * @param {boolean} keysAndValues - Whether to include a values buffer in the test
+ * @param {GPUDevice} device
+ * @param {boolean} keysAndValues - (optional) Whether to include a values buffer in the test. Default = false
  */
 export async function testRadixSort(device: GPUDevice, keysAndValues: boolean = false) {
   const {
@@ -14,8 +15,6 @@ export async function testRadixSort(device: GPUDevice, keysAndValues: boolean = 
 
   const maxElements = Math.floor(Math.min(maxBufferSize, maxStorageBufferBindingSize) / 4);
   const workgroupSizes: Array<WorkgroupSize> = [];
-
-  console.log('maxElements:', maxElements);
 
   const sizes = [2, 4, 8, 16, 32, 64, 128, 256];
   for (let workgroupSizeX of sizes) {
@@ -182,9 +181,50 @@ export async function test_prefix_sum(device: GPUDevice) {
   }
 }
 
+export function createTexture(device: GPUDevice, data: Uint32Array, format: GPUTextureFormat = 'rg32uint'): [GPUTexture, GPUBuffer] {
+  // Transfer data to GPU
+  const buffer = device.createBuffer({
+    size: data.length * 4,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Uint32Array(buffer.getMappedRange()).set(data);
+  buffer.unmap();
+
+  const regex = /^([rgbaRGBA]{1,4})(\d+)(\w+)?$/;
+  const matches = format.match(regex)!;
+  const components = matches[1].length;
+  const TEXTURE_WIDTH = Math.min(8192, data.length / components);
+  const TEXTURE_HEIGHT = Math.ceil((data.length / components) / TEXTURE_WIDTH);
+  const texture = device.createTexture({
+    size: {
+      width: TEXTURE_WIDTH,
+      height: TEXTURE_HEIGHT,
+    },
+    format,
+    usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST,
+  });
+
+  const commandEncoder = device.createCommandEncoder();
+  commandEncoder.copyBufferToTexture({
+    buffer,
+    bytesPerRow: Math.ceil((texture.width * 2 * 4) / 256) * 256,
+  }, { texture }, [TEXTURE_WIDTH, TEXTURE_HEIGHT, 1]);
+  device.queue.submit([commandEncoder.finish()]);
+  buffer.destroy();
+
+  // Create buffer to read back data from CPU
+  const dataBufferMapped = device.createBuffer({
+    size: data.length * 4,
+    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+  });
+
+  return [texture, dataBufferMapped];
+}
+
 // Create a GPUBuffer with data from an Uint32Array
 // Also create a second buffer to read back from GPU
-export function createBuffers(device: GPUDevice, data: Uint32Array, usage: number = 0) {
+export function createBuffers(device: GPUDevice, data: Uint32Array, usage: number = 0): [GPUBuffer, GPUBuffer] {
   // Transfer data to GPU
   const dataBuffer = device.createBuffer({
     size: data.length * 4,
